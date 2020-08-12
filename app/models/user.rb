@@ -21,6 +21,10 @@ class User < ActiveRecord::Base
 
   has_many :availabilities, dependent: :destroy
 
+  has_one :suspension, dependent: :destroy
+
+  has_many :received_conversations, class_name: 'Conversation', foreign_key: 'recipient_id'
+
   geocoded_by :full_address
   after_validation :geocode, if: ->(obj) { obj.full_address.present? }
 
@@ -52,7 +56,10 @@ class User < ActiveRecord::Base
   scope :admins_readonly, -> { includes(:roles).where(roles: { url_slug: 'admin-readonly' }) }
   scope :with_availabilities, -> { includes(:availabilities).where.not(availabilities: { id: nil }) }
 
-  scope :active, -> { where(active: true) }
+  scope :active, -> { 
+    joins('FULL OUTER JOIN "suspensions" ON "suspensions"."user_id" = "users"."id"')
+      .where('"suspensions"."user_id" IS NULL AND "users"."active" IS TRUE') 
+  }
 
   def self.authentication_keys
     [:email]
@@ -84,6 +91,18 @@ class User < ActiveRecord::Base
 
   def remember_me
     true
+  end
+
+  def suspended?
+    !!self.suspension
+  end
+
+  def can_unsuspend?
+    self.received_conversations.includes(:messages).all? do |convo| 
+      time_difference = (Time.now - convo.created_at)/3600
+      has_responded = convo.messages.any?{|msg| msg.user_id == self.id}
+      has_responded || time_difference < 48
+    end
   end
 
   def field_used_for_url_slug
