@@ -123,6 +123,12 @@ class User < ActiveRecord::Base
     if client?
       UserMailer.account_reactivated(self).deliver_later
     else
+      if self.availabilities && !self.availabilities.first
+        puts("/n/n/n/n/n/n/n/n/n/n/n/n/n/n HAMMOCK /n/n/n/n")
+        availability_job = AvailabilityJob.new(self)
+        puts(availability_job)
+        Delayed::Job.enqueue(availability_job, 0, 1.minute.from_now)
+      end
       UserMailer.account_activated(self).deliver_later
     end
   end
